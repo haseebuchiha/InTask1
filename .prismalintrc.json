@@ -1,0 +1,18 @@
+{
+  "rules": {
+    "model-name-pascal-case": "error",
+    "model-name-grammatical-number": ["error", { "style": "singular" }],
+    "model-name-mapping-snake-case": "error",
+    "field-name-camel-case": "error",
+    "field-name-mapping-snake-case": "error",
+    "enum-name-pascal-case": "error",
+    "require-field": ["error", { "require": ["id", "createdAt"] }],
+    "require-field-type": [
+      "error",
+      { "require": [{ "ifName": "/At$/", "type": "DateTime", "nativeType": "Timestamptz" }] }
+    ],
+    "require-field-index": ["error", { "forNames": ["createdAt"] }],
+    "field-order": ["error", { "order": ["id", "createdAt", "..."] }],
+    "forbid-required-ignored-field": "error"
+  }
+}

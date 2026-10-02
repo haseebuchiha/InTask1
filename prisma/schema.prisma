@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/db/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Ping {
+  id           Int        @id @default(autoincrement())
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  payload      Json
+  statusCode   Int?       @map("status_code")
+  durationMs   Int        @map("duration_ms")
+  response     Json?
+  error        String?
+  responseKind String     @map("response_kind")
+  origin       String?
+  incidents    Incident[]
+
+  @@index([createdAt])
+  @@map("ping")
+}
+
+model Incident {
+  id                Int      @id @default(autoincrement())
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+  pingId            Int      @map("ping_id")
+  ping              Ping     @relation(fields: [pingId], references: [id])
+  severity          String
+  durationMs        Int      @map("duration_ms")
+  averageDurationMs Int      @map("average_duration_ms")
+  reportStatus      String   @map("report_status")
+  summary           String?
+  likelyCauses      Json?    @map("likely_causes")
+  recommendations   Json?
+  inputTokens       Int      @default(0) @map("input_tokens")
+  cachedInputTokens Int      @default(0) @map("cached_input_tokens")
+  outputTokens      Int      @default(0) @map("output_tokens")
+
+  @@index([createdAt])
+  @@map("incident")
+}
+
+model ChatSession {
+  id        String    @id
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  title     String?
+  messages  Message[]
+
+  @@index([createdAt])
+  @@map("chat_session")
+}
+
+model Message {
+  id                String      @id
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  sessionId         String      @map("session_id")
+  session           ChatSession @relation(fields: [sessionId], references: [id])
+  role              String
+  parts             Json
+  questionHash      String?     @map("question_hash")
+  inputTokens       Int         @default(0) @map("input_tokens")
+  cachedInputTokens Int         @default(0) @map("cached_input_tokens")
+  outputTokens      Int         @default(0) @map("output_tokens")
+
+  @@index([createdAt])
+  @@index([questionHash])
+  @@map("message")
+}
+
+model ResponseSummary {
+  id                Int      @id @default(autoincrement())
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  day               DateTime @unique @db.Date
+  status            String
+  summary           String?
+  findings          Json?
+  statistics        Json
+  inputTokens       Int      @default(0) @map("input_tokens")
+  cachedInputTokens Int      @default(0) @map("cached_input_tokens")
+  outputTokens      Int      @default(0) @map("output_tokens")
+
+  @@index([createdAt])
+  @@map("response_summary")
+}
