@@ -22,7 +22,25 @@ The live copy was built on the server with `nice -n 10` and `NODE_OPTIONS=--max-
 
 ## Updating
 
-Pull, then `pnpm install --frozen-lockfile`, `pnpm exec prisma migrate deploy`, `pnpm build` and `pm2 restart ping-monitor`.
+By hand: pull, then `pnpm install --frozen-lockfile`, `pnpm exec prisma migrate deploy`, `pnpm build` and `pm2 restart ping-monitor`. These are the same steps [`deploy.sh`](../deploy.sh) runs, so a push to `main` does them for you.
+
+## Automatic deploys
+
+Every push to `main` that passes CI deploys itself. The reasoning is [decision 57](decisions.md#57-deploy-from-ci-over-ssh-with-a-forced-command).
+
+**Three jobs.** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `checks` (format, migrate, lint, types, tests with coverage, against a Postgres 17 service) and `build` (`pnpm build`, no database) in parallel on every push and pull request. `deploy` needs both, runs only for pushes to `main`, and sits in the `deploy` concurrency group, so two deploys never overlap. It writes the private key and the server's host key from secrets, then runs `ssh -i key user@host <commit sha>`.
+
+**The secrets**, under the repo's Settings → Secrets and variables → Actions → Repository secrets:
+
+- `VPS_SSH_KEY`: the private half of a key made only for this.
+- `VPS_KNOWN_HOSTS`: the `ssh-keyscan -t ed25519` line for the server.
+- `VPS_HOST`: the server's IP. `VPS_USER`: `root`.
+
+**Two keys, one each way.** The first lets GitHub into the server, but only to run the script. Its line in `authorized_keys` carries `command="/opt/task1/deploy.sh"` plus the no-pty and no-forwarding options, so a holder of the key can run nothing else, and the sha it passes arrives as `SSH_ORIGINAL_COMMAND`. The second lets the server read the repo: `/opt/task1` is a clone of `git@github.com:haseebuchiha/InTask1.git` that pulls over a read-only GitHub deploy key ("VPS pull (read-only)" under Settings → Deploy keys), stored at `/root/.ssh/intask1_deploy` and reached through the ssh config alias `github.com-intask1`. `.env`, `node_modules` and `.next` are untracked, so resets leave them alone.
+
+**What `deploy.sh` does.** It fetches `origin main`, runs `git reset --hard` to the sha, `pnpm install --frozen-lockfile --prefer-offline` and `prisma migrate deploy`, then builds into `.next-build` with `NEXT_DIST_DIR=.next-build`, at `nice -n 10` and a 2 GB heap. The live site keeps serving the old `.next` during the 3-minute build on the 1-CPU box. Then `rm -rf .next && mv .next-build .next`, which takes milliseconds, and `pm2 restart ping-monitor`. `next.config.ts` reads `NEXT_DIST_DIR` for `distDir`, and `next start` reads the default, so it serves `.next`.
+
+**Rollback.** Push a revert to `main`. Or on the server, `git reset --hard <sha>` and the rest of `deploy.sh` by hand.
 
 ## How the pieces are set up
 

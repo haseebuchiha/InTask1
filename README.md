@@ -150,7 +150,7 @@ tests/                   the same folders as src/
 
 Run them with `pnpm test`, or `pnpm test:coverage` for a report in `coverage/`. They need the migrated database from [Running it locally](#running-it-locally). The last coverage run covered 91.86% of lines and 86.81% of branches overall, and 100% of lines and branches in the services, models, API routes, jobs and `src/lib/`. What's left is mostly code only Next runs, like the server pages, the layout and `instrumentation.ts`, and files copied from shadcn and AI Elements.
 
-**CI.** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and pull request. With Postgres 17 and Node 24, it runs `pnpm install --frozen-lockfile`, `pnpm format:check`, `pnpm exec prisma migrate deploy`, `pnpm lint`, `pnpm exec next typegen` and `pnpm exec tsc --noEmit`, `pnpm test:coverage` and `pnpm build`, then uploads `coverage/`.
+**CI.** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and pull request, as two parallel jobs: `checks`, which with Postgres 17 and Node 24 runs `pnpm install --frozen-lockfile`, `pnpm format:check`, `pnpm exec prisma migrate deploy`, `pnpm lint`, `pnpm exec next typegen` and `pnpm exec tsc --noEmit`, and `pnpm test:coverage`, then uploads `coverage/`, and `build`, which runs `pnpm build`; a `deploy` job follows on `main` once both pass.
 
 ## Assumptions
 
@@ -176,7 +176,7 @@ Run them with `pnpm test`, or `pnpm test:coverage` for a report in `coverage/`. 
 
 ## Deployment
 
-The app is live at [https://ping-monitor.applyfast.tech](https://ping-monitor.applyfast.tech), on a VPS that already hosts other things, so it shares the box's nginx, Postgres 17 and the `openai-oauth` proxy. It runs as one `next start` under pm2, in fork mode with exactly one instance, behind nginx with TLS and HTTP/2, and Postgres is reached over loopback on the same machine. It's a VPS and not a serverless free tier because the timer and the open streams need a process that stays up ([decision 2](docs/decisions.md#2-run-on-a-long-lived-server-not-serverless)). The install commands, the nginx and pm2 settings and the update procedure are in [`docs/deployment.md`](docs/deployment.md).
+The app is live at [https://ping-monitor.applyfast.tech](https://ping-monitor.applyfast.tech), on a VPS that already hosts other things, so it shares the box's nginx, Postgres 17 and the `openai-oauth` proxy. It runs as one `next start` under pm2, in fork mode with exactly one instance, behind nginx with TLS and HTTP/2, and Postgres is reached over loopback on the same machine. It's a VPS and not a serverless free tier because the timer and the open streams need a process that stays up ([decision 2](docs/decisions.md#2-run-on-a-long-lived-server-not-serverless)). Every push to `main` that passes CI deploys itself, over SSH, with the steps in [`deploy.sh`](deploy.sh) ([decision 57](docs/decisions.md#57-deploy-from-ci-over-ssh-with-a-forced-command)). The install commands, the nginx and pm2 settings and the update procedure are in [`docs/deployment.md`](docs/deployment.md).
 
 ## More reading
 

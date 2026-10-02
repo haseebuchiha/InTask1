@@ -1709,3 +1709,44 @@ OpenAI caches the start of a prompt it has seen recently, for prompts of 1024 to
 - Rows from before the migration have 0 cached tokens, so their estimate is unchanged.
 - The local proxy reports 0 cached tokens, so nothing changes in development. The discount and the "cached" lines only show against a provider that reports them, like OpenAI through the gateway.
 - Cache writes aren't stored. OpenAI doesn't charge for them.
+
+---
+
+## 57. Deploy from CI over SSH with a forced command
+
+Date: 2026-10-02 · Status: accepted · Extends decisions 2 and 24
+
+### Context
+
+The live copy was updated by hand: ssh in, pull, install, migrate, build, restart. CI already proved every push, but nothing acted on a green run. The server is a 1-CPU VPS where a build takes about 3 minutes, and `next start` serves from `.next`, so a build in place would take the site down for those minutes.
+
+### Decision
+
+- The workflow has three jobs. `checks` and `build` run in parallel on every push and pull request. `deploy` needs both, runs only for pushes to `main`, and sits in a `deploy` concurrency group, so two deploys never overlap.
+- `deploy` writes a private key and the server's host key from secrets (`VPS_SSH_KEY`, `VPS_KNOWN_HOSTS`, `VPS_HOST`, `VPS_USER`), then runs `ssh user@host <commit sha>`.
+- The server's `authorized_keys` entry for that key carries `command="/opt/task1/deploy.sh"` plus the no-pty and no-forwarding options. The key can run nothing else, and the sha arrives as `SSH_ORIGINAL_COMMAND`.
+- `deploy.sh`, in the repo root and at `/opt/task1/deploy.sh`, fetches `origin main`, resets hard to the sha, installs, runs `prisma migrate deploy`, builds into `.next-build` with `NEXT_DIST_DIR=.next-build` at `nice -n 10` and a 2 GB heap, then swaps `.next-build` into `.next` and restarts pm2. `next.config.ts` sets `distDir` from `NEXT_DIST_DIR`, defaulting to `.next`.
+- `/opt/task1` is a git clone that pulls over a read-only GitHub deploy key, through an ssh config alias. `.env`, `node_modules` and `.next` are untracked and survive resets.
+
+### Why
+
+- A green run is the only thing that reaches the server. The deploy can't start before `checks` and `build` both pass.
+- The forced command bounds the key. If `VPS_SSH_KEY` leaks, its holder can run `deploy.sh` and nothing else, and the script only deploys a commit from `origin main`.
+- Two keys, each with one job: one lets GitHub into the server for the script, the other lets the server read the repo. Neither can do the other's work.
+- The side-folder build keeps the old site serving during the 3 minutes. The swap is a `mv`, so the gap is the pm2 restart alone.
+- The concurrency group stops two pushes from racing on one `.next-build` folder.
+
+### Alternatives considered
+
+- A webhook listener on the server. One more process to keep up, and a port to protect.
+- A pull-based cron on the server. Deploys late, and runs with no CI gate.
+- Building in CI and shipping the artifact. The build is tied to `node_modules` on the box, and the box builds in 3 minutes anyway.
+- Vercel or Railway. Ruled out in decision 2.
+- A build in place. Takes the live site down for the build.
+
+### Consequences
+
+- The deploy key is root, restricted to one script.
+- A failed build leaves the old `.next` serving. The script stops at the first error, before the swap.
+- Migrations run before the swap, so a migration that drops a column the old build reads can error until the restart.
+- The first automatic deploy ran on 2026-10-02.

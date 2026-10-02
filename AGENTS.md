@@ -57,6 +57,7 @@ prisma/
   migrations/        the history of changes to those tables
 prisma.config.ts     Prisma's connection settings
 ecosystem.config.js  pm2's settings for production
+deploy.sh            what CI runs on the server for each push to main: reset, install, migrate, build aside, swap, restart
 biome.json           Biome's formatting settings, and the files it skips
 docs/
   decisions.md       what we chose and why
@@ -206,6 +207,7 @@ When a page or route needs a model read exactly as it is, the service re-exports
 - nginx serves the site over HTTP/2. Over HTTP/1.1 a browser allows only 6 connections to one site, and each open dashboard tab holds one.
 - On `SIGTERM` or `SIGINT`, `stopPingTimerAndStreamsOnShutdown` in `jobs/ping.ts` clears the timer and calls `shutDownPingStreams`. That ends every open stream, and any later stream request gets a 503. Streams and the 503 send `Connection: close`, so a browser's reconnect opens a fresh connection to the new process. Next then finishes the page requests in flight, and the app exits in well under a second.
 - pm2's `kill_timeout`, 10 seconds, is only a safety net.
+- Pushes to `main` deploy through CI and `deploy.sh`: the workflow's `deploy` job runs it over SSH with a forced command. The build goes to `.next-build`, with `NEXT_DIST_DIR`, so the old `.next` keeps serving, and is swapped in before the restart. See decision 57.
 - A restart drops a ping that's still in flight. Nothing is saved for it. The new process pings again one interval after it starts. Open tabs show Reconnecting…, then go Live.
 
 ## Logging
